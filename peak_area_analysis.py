@@ -10,6 +10,12 @@ pd.set_option('display.max_columns', None)
 df = pd.read_csv("C:/MS_project/doc_grid.csv")
 df.head()
 
+# FIx the incorrectly labelled file path for 14win std3 replicate 1
+df['File Path'] = df['File Path'].replace(r'D:\Stellena\Data_May 2023_timsTOF_Lipid Analysis_DIA PASEF\20230508_DIA_windowtest\UltimateSplash_Var_PIP_14win_std3_6_1_16383.d', 
+                                          r'D:\Stellena\Data_May 2023_timsTOF_Lipid Analysis_DIA PASEF\20230508_DIA_windowtest\UltimateSplash_Var_PIP_14win_std3_6_3_16383.d')
+
+
+
 # Count the number of unique values in a column
 df['Molecule'].nunique()
 # Remove rows where the value in the Molecule column is NaN
@@ -42,10 +48,10 @@ df['Total Area MS1'].isna().sum() + (df['Total Area MS1'] == 0).sum()
 
 # Number of rows in df
 len(df)
-
+df[(df['Window'] == '14win') & (df['Molecule'] == '14:0-13:0-14:0 TG-d5') & (df['Dilution'] == 'std3')]
 
 # Import transitions
-transitions = pd.read_csv('UltimateSplash_Pos_v2.csv')
+transitions = pd.read_csv('C:/MS_project/UltimateSplash_Pos_v2.csv')
 
 # Subset transition_subset for columns "PrecursorAdduct", "ProductName", "ProductMz"
 transitions = transitions[['PrecursorName', 'PrecursorAdduct', 'ProductName', 'ProductMz']]
@@ -64,8 +70,14 @@ df['not_precursor'] = ~df['not_precursor']
 len(df)
 
 df.tail(20)
-df['is_precursor'].value_counts()
 
+
+# Check if there are lipid adducts with the same window, dilution, replicate, but different total area MS1
+# These are all 14win, std3, replicate 1
+df_nodup = df.drop_duplicates(subset=['Molecule', 'Window', 'Dilution', 'Replicate', 'Total Area MS1'])
+df_nodup[df_nodup.duplicated(subset=['Molecule', 'Window', 'Dilution', 'Replicate'], keep=False)]
+
+df_nodup[(df_nodup['Replicate'] == '3') & (df_nodup['Dilution'] == 'std3') & (df_nodup['Window'] == '28win')]
 
 # Subset for only product ion transitions
 df_MS2_only  = df[df['not_precursor']]
@@ -75,13 +87,17 @@ df_subset = df_MS2_only[['Molecule', 'Molecule List', 'window_type', 'Window', '
 # Add a new column to the df_subset dataframe called "Total Area MS2" which contains the sum of the "Area" column corresponding to each Molecule, Window and replicate
 df_subset['Total Area MS2'] = df_subset.groupby(['Molecule', 'Window', 'Dilution', 'Replicate'])['Area'].transform('sum')
 df_subset['Total Background MS2'] = df_subset.groupby(['Molecule', 'Window', 'Dilution', 'Replicate'])['Background'].transform('sum')
-# If the value in the "Total Area MS2" column is 0, then replace it with 1
-df_subset['Total Area MS2'] = df_subset['Total Area MS2'].replace(0, 1)
+# If the value in the 'Total Background MS2' column is 0, then replace it with 1
+df_subset['Total Background MS2'] = df_subset['Total Background MS2'].replace(0, 1)
 
-# df_subset[(df_subset['Molecule'] == '14:0-13:0-14:0 TG-d5') & (df_subset['Dilution'] == 'std1') & (df_subset['Window'] == 'NW')]
+df_subset[(df_subset['Molecule'] == '14:0-13:0-14:0 TG-d5') & (df_subset['Dilution'] == 'std3') & (df_subset['Window'] == '14win') & (df_subset['Replicate'] == '1')]
 
 # Remove rows in df_subset where the value in the "Total Area MS1" is duplicate
-df_subset = df_subset.drop_duplicates(subset=['Molecule', 'Molecule List', 'window_type', 'Window', 'Dilution', 'Replicate', 'Total Area MS1', 'Total Area MS2', 'Total Background MS1', 'Total Background MS2'])
+# The subset parameter is used to specify the columns that should be considered when identifying duplicates.
+# Some lipid adducts with the same window, dilution, replicate, have different total area MS1
+# df_subset = df_subset.drop_duplicates(subset=['Molecule', 'Molecule List', 'window_type', 'Window', 'Dilution', 'Replicate', 'Total Area MS1', 'Total Area MS2', 'Total Background MS1', 'Total Background MS2'])
+df_subset = df_subset.drop_duplicates(subset=['Molecule', 'window_type', 'Window', 'Dilution', 'Replicate'])
+
 # Remove columns Background and Area
 df_subset = df_subset.drop(columns=['Background', 'Area'])
 # Add column to df_subset called SN_MS1 and SN_MS2
@@ -89,17 +105,35 @@ df_subset['SN_MS1'] = df_subset['Total Area MS1'] / df_subset['Total Background 
 df_subset['SN_MS2'] = df_subset['Total Area MS2'] / df_subset['Total Background MS2']
 
 # Fixed window
-df_subset = df_subset[(df_subset['Dilution'] == 'std2') & ((df_subset['window_type'] == 'fixed') | (df_subset['window_type'] == 'none'))]
-order = ['NW', '200da', '100da', '50da', '25da']
+# df_subset = df_subset[(df_subset['Dilution'] == 'std1') & ((df_subset['window_type'] == 'fixed') | (df_subset['window_type'] == 'none'))]
+# order = ['NW', '200da', '100da', '50da', '25da']
 # Variable window
-# df_subset = df_subset[(df_subset['Dilution'] == 'std2') & ((df_subset['window_type'] == 'variable') | (df_subset['window_type'] == 'none'))]
-# order = ['NW', '4win', '7win', '14win', '28win']
+df_subset = df_subset[(df_subset['Dilution'] == 'std3') & ((df_subset['window_type'] == 'variable') | (df_subset['window_type'] == 'none'))]
+order = ['NW', '4win', '7win', '14win', '28win']
 
 # Convert the 'Window' column to a category and specify the order
 df_subset['Window'] = pd.Categorical(df_subset['Window'], categories=order, ordered=True)
 df_subset = df_subset.sort_values('Window')
 df_subset['Window'].value_counts()
 
+win14_df = df_subset[(df_subset['Window'] == '14win') & (df_subset['Dilution'] == 'std3')]
+df_subset[(df_subset['Window'] == '14win') & (df_subset['Dilution'] == 'std3') & (df_subset['Molecule'] == '14:0-13:0-14:0 TG-d5')]
+# Plot histogram of Total Area MS2 for win14_df
+win14_df['Total Area MS2'].hist(bins=100)
+plt.title('Histogram of Total Area MS2 for 14win')
+plt.xlabel('Total Area MS2')
+plt.ylabel('Frequency')
+plt.show()
+
+# Plot histogram of Total Area MS1 for win14_df
+win14_df['Total Area MS1'].hist(bins=100)
+plt.title('Histogram of Total Area MS1 for 14win')
+plt.xlabel('Total Area MS1')
+plt.ylabel('Frequency')
+plt.show()
+
+# Subset rows in win14_df where the value in the "Total Area MS2" column is greater than 2 * 1e7
+win14_df[win14_df['Total Area MS2'] > 2 * 1e7]
 
 # Define a function to calculate the coefficient of variation
 def calculate_cv(x):
@@ -111,10 +145,12 @@ cv_df = df_subset.groupby(['Window', 'Molecule'])['Total Area MS1'].apply(calcul
 cv_df.rename(columns={'Total Area MS1': 'CV_MS1'}, inplace=True)
 cv_temp = df_subset.groupby(['Window', 'Molecule'])['Total Area MS2'].apply(calculate_cv).reset_index()
 cv_temp.rename(columns={'Total Area MS2': 'CV_MS2'}, inplace=True)
+cv_temp[(cv_temp['Window'] == '14win')]
+len(cv_temp[(cv_temp['Window'] == '14win')])
 
 # Merge cv_df with cv_temp on 'Molecule' and 'Window'
 cv_df = cv_df.merge(cv_temp, on=['Molecule', 'Window'])
-
+cv_df[(cv_df['Window'] == '14win')]
 
 # Merge cv_df with df_subset on 'Molecule' and 'Window'
 # cv_df = cv_df.merge(df_subset, on=['Molecule', 'Window', 'Replicate'])
@@ -135,10 +171,14 @@ cv_df
 # Reshape the DataFrame from wide format to long format
 long_df = cv_df.melt(id_vars='Window', value_vars=['CV_MS1', 'CV_MS2'], var_name='CV_Type', value_name='CV')
 
+long_df[long_df['Window'] == '14win']
+
 # Create the boxplot
 sns.boxplot(x='Window', y='CV', hue='CV_Type', data=long_df, palette=['#B56962', '#64A07E'], showfliers=False)
+# Show outliers
 
-plt.title('Coefficient of Variation (CV) (%) of Area for Lipid Adducts MS1 std2')
+
+plt.title('Coefficient of Variation (CV) (%) of Area for Lipid Adducts std3')
 plt.xlabel('Window')
 plt.ylabel('CV')
 plt.show()
