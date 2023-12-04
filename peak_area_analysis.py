@@ -90,8 +90,6 @@ df_subset['Total Background MS2'] = df_subset.groupby(['Molecule', 'Window', 'Di
 # If the value in the 'Total Background MS2' column is 0, then replace it with 1
 df_subset['Total Background MS2'] = df_subset['Total Background MS2'].replace(0, 1)
 
-df_subset[(df_subset['Molecule'] == '14:0-13:0-14:0 TG-d5') & (df_subset['Dilution'] == 'std3') & (df_subset['Window'] == '14win') & (df_subset['Replicate'] == '1')]
-
 # Remove rows in df_subset where the value in the "Total Area MS1" is duplicate
 # The subset parameter is used to specify the columns that should be considered when identifying duplicates.
 # Some lipid adducts with the same window, dilution, replicate, have different total area MS1
@@ -105,36 +103,66 @@ df_subset['SN_MS1'] = df_subset['Total Area MS1'] / df_subset['Total Background 
 df_subset['SN_MS2'] = df_subset['Total Area MS2'] / df_subset['Total Background MS2']
 
 # Fixed window
-# df_subset = df_subset[(df_subset['Dilution'] == 'std1') & ((df_subset['window_type'] == 'fixed') | (df_subset['window_type'] == 'none'))]
-# order = ['NW', '200da', '100da', '50da', '25da']
+df_subset = df_subset[(df_subset['Dilution'] == 'std3') & ((df_subset['window_type'] == 'fixed') | (df_subset['window_type'] == 'none'))]
+order = ['NW', '200da', '100da', '50da', '25da']
 # Variable window
-df_subset = df_subset[(df_subset['Dilution'] == 'std3') & ((df_subset['window_type'] == 'variable') | (df_subset['window_type'] == 'none'))]
-order = ['NW', '4win', '7win', '14win', '28win']
+# df_subset = df_subset[(df_subset['Dilution'] == 'std3') & ((df_subset['window_type'] == 'variable') | (df_subset['window_type'] == 'none'))]
+# order = ['NW', '4win', '7win', '14win', '28win']
 
 # Convert the 'Window' column to a category and specify the order
 df_subset['Window'] = pd.Categorical(df_subset['Window'], categories=order, ordered=True)
 df_subset = df_subset.sort_values('Window')
 df_subset['Window'].value_counts()
 
-win14_df = df_subset[(df_subset['Window'] == '14win') & (df_subset['Dilution'] == 'std3')]
-df_subset[(df_subset['Window'] == '14win') & (df_subset['Dilution'] == 'std3') & (df_subset['Molecule'] == '14:0-13:0-14:0 TG-d5')]
-# Plot histogram of Total Area MS2 for win14_df
-win14_df['Total Area MS2'].hist(bins=100)
-plt.title('Histogram of Total Area MS2 for 14win')
-plt.xlabel('Total Area MS2')
-plt.ylabel('Frequency')
+## Plot SN for each window for each standard separately
+# Group df_subset by 'Molecule', 'Window', 'Dilution', 'Replicate', select the  minimum value in the 'SN_MS1' column, then divide each value in the 'SN_MS1' column by the minimum value, 
+# add a new column to df_subset called 'SN_MS1_norm' which contains the normalized SN_MS1 values
+df_subset['SN_MS1_norm'] = df_subset.groupby(['Molecule', 'Window', 'Dilution'])['SN_MS1'].transform(lambda x: x / x.min())
+df_subset['SN_MS2_norm'] = df_subset.groupby(['Molecule', 'Window', 'Dilution'])['SN_MS2'].transform(lambda x: x / x.min())
+
+df_subset[df_subset['Molecule'] == '14:0-13:0-14:0 TG-d5']
+
+# Group df_subset by 'Window', and get the median value in the 'SN_MS1_norm' column, and the median value in the 'SN_MS2_norm' column
+# Add a new column to df_subset called 'SN_MS1_norm_median' which contains the median SN_MS1_norm values
+df_subset['SN_MS1_norm_median'] = df_subset.groupby(['Window'])['SN_MS1_norm'].transform('median')
+df_subset['SN_MS2_norm_median'] = df_subset.groupby(['Window'])['SN_MS2_norm'].transform('median')
+
+# Sanity check
+df_subset['SN_MS2_norm_median'].value_counts()
+df_subset['SN_MS1_norm_median'].value_counts()
+df_subset[df_subset['Window'] == '50da']['SN_MS1_norm'].median()
+df_subset['SN_MS1_norm'].max()
+df_subset['SN_MS1_norm'].hist()
 plt.show()
 
-# Plot histogram of Total Area MS1 for win14_df
-win14_df['Total Area MS1'].hist(bins=100)
-plt.title('Histogram of Total Area MS1 for 14win')
-plt.xlabel('Total Area MS1')
-plt.ylabel('Frequency')
+
+
+
+
+df_subset[df_subset['Window'] == '50da']
+# SUm of column in dataframe
+df_subset
+
+
+# Remove duplicates based on 'Window' and 'SN_MS1_norm_median', add to new dataframe called df_subset_SN_median
+df_subset_SN_median = df_subset.drop_duplicates(subset='Window')
+df_subset_SN_median = df_subset_SN_median.sort_values('Window')
+# Remove all columns except 'Window', 'SN_MS1_norm_median', 'SN_MS2_norm_median'
+df_subset_SN_median = df_subset_SN_median[['Window', 'SN_MS1_norm_median', 'SN_MS2_norm_median']]
+# Convert df_subset_SN_median from wide format to long format
+df_subset_SN_median = df_subset_SN_median.melt(id_vars='Window', value_vars=['SN_MS1_norm_median', 'SN_MS2_norm_median'], var_name='SN_Type', value_name='SN')
+
+# Create lineplot of SN from df_subset_SN_median by 'Window'
+sns.lineplot(x='Window', y='SN', hue='SN_Type', data=df_subset_SN_median, palette=['#B56962', '#64A07E'])
+plt.title('Normalized Median Signal-to-Noise (SN) of Lipid Adducts MS1 std3')
+plt.xlabel('Window')
+plt.ylabel('SN')
 plt.show()
 
-# Subset rows in win14_df where the value in the "Total Area MS2" column is greater than 2 * 1e7
-win14_df[win14_df['Total Area MS2'] > 2 * 1e7]
 
+
+
+## Plot CVs for each window for each standard separately
 # Define a function to calculate the coefficient of variation
 def calculate_cv(x):
     return (x.std() / x.mean()) * 100
@@ -166,8 +194,6 @@ cv_df
 # plt.ylabel('CV')
 # plt.show()
 
-
-
 # Reshape the DataFrame from wide format to long format
 long_df = cv_df.melt(id_vars='Window', value_vars=['CV_MS1', 'CV_MS2'], var_name='CV_Type', value_name='CV')
 
@@ -175,9 +201,6 @@ long_df[long_df['Window'] == '14win']
 
 # Create the boxplot
 sns.boxplot(x='Window', y='CV', hue='CV_Type', data=long_df, palette=['#B56962', '#64A07E'], showfliers=False)
-# Show outliers
-
-
 plt.title('Coefficient of Variation (CV) (%) of Area for Lipid Adducts std3')
 plt.xlabel('Window')
 plt.ylabel('CV')
@@ -185,14 +208,14 @@ plt.show()
 
 
 
+## Plot CVs for each window for all standards combined
+# Below is for combining all the standards
 # Create an empty dataframe and add a column to it
 # Run each row individually
 cv_sum_df = pd.DataFrame()
 cv_sum_df['std1'] = cv_df['CV']
 cv_sum_df['std2'] = cv_df['CV']
 cv_sum_df['std3'] = cv_df['CV']
-
-
 
 # Merge cv_sum_df with cv_df on 'std3' and 'CV'
 # Rename the 'CV' column to 'std3' in cv_df
@@ -215,5 +238,8 @@ plt.title('Coefficient of Variation (CV) (%) of Area for Lipid Adducts MS1 (all 
 plt.xlabel('Window')
 plt.ylabel('CV')
 plt.show()
+
+
+
 
 
