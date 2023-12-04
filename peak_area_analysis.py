@@ -10,6 +10,9 @@ pd.set_option('display.max_columns', None)
 df = pd.read_csv("C:/MS_project/doc_grid.csv")
 df.head()
 
+# Count unique values in a column
+df['Molecule'].nunique()
+
 # FIx the incorrectly labelled file path for 14win std3 replicate 1
 df['File Path'] = df['File Path'].replace(r'D:\Stellena\Data_May 2023_timsTOF_Lipid Analysis_DIA PASEF\20230508_DIA_windowtest\UltimateSplash_Var_PIP_14win_std3_6_1_16383.d', 
                                           r'D:\Stellena\Data_May 2023_timsTOF_Lipid Analysis_DIA PASEF\20230508_DIA_windowtest\UltimateSplash_Var_PIP_14win_std3_6_3_16383.d')
@@ -103,11 +106,11 @@ df_subset['SN_MS1'] = df_subset['Total Area MS1'] / df_subset['Total Background 
 df_subset['SN_MS2'] = df_subset['Total Area MS2'] / df_subset['Total Background MS2']
 
 # Fixed window
-df_subset = df_subset[(df_subset['Dilution'] == 'std3') & ((df_subset['window_type'] == 'fixed') | (df_subset['window_type'] == 'none'))]
-order = ['NW', '200da', '100da', '50da', '25da']
+# df_subset = df_subset[(df_subset['window_type'] == 'fixed') | (df_subset['window_type'] == 'none')]
+# order = ['NW', '200da', '100da', '50da', '25da']
 # Variable window
-# df_subset = df_subset[(df_subset['Dilution'] == 'std3') & ((df_subset['window_type'] == 'variable') | (df_subset['window_type'] == 'none'))]
-# order = ['NW', '4win', '7win', '14win', '28win']
+df_subset = df_subset[(df_subset['window_type'] == 'variable') | (df_subset['window_type'] == 'none')]
+order = ['NW', '4win', '7win', '14win', '28win']
 
 # Convert the 'Window' column to a category and specify the order
 df_subset['Window'] = pd.Categorical(df_subset['Window'], categories=order, ordered=True)
@@ -115,6 +118,45 @@ df_subset = df_subset.sort_values('Window')
 df_subset['Window'].value_counts()
 
 ## Plot SN for each window for each standard separately
+# I normalized against the lowest value across all comparisons, all lipids and windows within a standard
+# Group df_subset by 'Dilution', select the  minimum value in the 'SN_MS1' column, then divide each value in the 'SN_MS1' column by the minimum value,
+# add a new column to df_subset called 'SN_MS1_norm' which contains the normalized SN_MS1 values
+df_subset['SN_MS1_norm'] = df_subset.groupby(['Dilution'])['SN_MS1'].transform(lambda x: x / x.min())
+df_subset['SN_MS2_norm'] = df_subset.groupby(['Dilution'])['SN_MS2'].transform(lambda x: x / x.min())
+# Group df_subset by window and dilution, and get the median value in the 'SN_MS1_norm' column, and the median value in the 'SN_MS2_norm' column
+# Create new dataframe called df_subset_SN_median
+df_subset_SN_median = df_subset.groupby(['Window', 'Dilution'])['SN_MS1_norm'].median().reset_index()
+df_subset_SN_median['SN_MS2_norm'] = df_subset.groupby(['Window', 'Dilution'])['SN_MS2_norm'].median().reset_index()['SN_MS2_norm']
+# Convert df_subset_SN_median from wide format to long format, keep the Dilution column
+
+
+df_subset_SN_median = df_subset_SN_median.melt(id_vars=['Window', 'Dilution'], value_vars=['SN_MS1_norm', 'SN_MS2_norm'], var_name='SN_Type', value_name='SN')
+# Create lineplot of SN from df_subset_SN_median by 'Window'
+
+sns.lineplot(x='Window', y='SN', hue='SN_Type', data=df_subset_SN_median[df_subset_SN_median['Dilution'] == 'std1'], palette=['#B56962', '#64A07E'])
+plt.title('Normalized Median Signal-to-Noise (SN) of Lipid Adducts std1')
+plt.xlabel('Window')
+plt.ylabel('SN')
+plt.show()
+
+sns.lineplot(x='Window', y='SN', hue='SN_Type', data=df_subset_SN_median[df_subset_SN_median['Dilution'] == 'std2'], palette=['#B56962', '#64A07E'])
+plt.title('Normalized Median Signal-to-Noise (SN) of Lipid Adducts std2')
+plt.xlabel('Window')
+plt.ylabel('SN')
+plt.show()
+
+sns.lineplot(x='Window', y='SN', hue='SN_Type', data=df_subset_SN_median[df_subset_SN_median['Dilution'] == 'std3'], palette=['#B56962', '#64A07E'])
+plt.title('Normalized Median Signal-to-Noise (SN) of Lipid Adducts std3')
+plt.xlabel('Window')
+plt.ylabel('SN')
+plt.show()
+
+
+
+
+
+## Plot SN for each window for each standard separately
+# I normalized against the lowest value across the three replicates
 # Group df_subset by 'Molecule', 'Window', 'Dilution', 'Replicate', select the  minimum value in the 'SN_MS1' column, then divide each value in the 'SN_MS1' column by the minimum value, 
 # add a new column to df_subset called 'SN_MS1_norm' which contains the normalized SN_MS1 values
 df_subset['SN_MS1_norm'] = df_subset.groupby(['Molecule', 'Window', 'Dilution'])['SN_MS1'].transform(lambda x: x / x.min())
@@ -134,9 +176,6 @@ df_subset[df_subset['Window'] == '50da']['SN_MS1_norm'].median()
 df_subset['SN_MS1_norm'].max()
 df_subset['SN_MS1_norm'].hist()
 plt.show()
-
-
-
 
 
 df_subset[df_subset['Window'] == '50da']
