@@ -73,7 +73,7 @@ df['not_precursor'] = ~df['not_precursor']
 len(df)
 
 df.tail(20)
-
+df
 
 # Check if there are lipid adducts with the same window, dilution, replicate, but different total area MS1
 # These are all 14win, std3, replicate 1
@@ -85,6 +85,8 @@ df_nodup[(df_nodup['Replicate'] == '3') & (df_nodup['Dilution'] == 'std3') & (df
 # Subset for only product ion transitions
 df_MS2_only  = df[df['not_precursor']]
 df_subset = df_MS2_only[['Molecule', 'Molecule List', 'window_type', 'Window', 'Dilution', 'Replicate', 'Background', 'Area', 'Total Area MS1', 'Total Background MS1', 'not_precursor']]
+
+
 
 # Group by 'Molecule', 'Window', and 'Replicate', sum the "Area" column for rows where is_precursor == 'False' and then
 # Add a new column to the df_subset dataframe called "Total Area MS2" which contains the sum of the "Area" column corresponding to each Molecule, Window and replicate
@@ -106,11 +108,11 @@ df_subset['SN_MS1'] = df_subset['Total Area MS1'] / df_subset['Total Background 
 df_subset['SN_MS2'] = df_subset['Total Area MS2'] / df_subset['Total Background MS2']
 
 # Fixed window
-# df_subset = df_subset[(df_subset['window_type'] == 'fixed') | (df_subset['window_type'] == 'none')]
-# order = ['NW', '200da', '100da', '50da', '25da']
+df_subset = df_subset[(df_subset['window_type'] == 'fixed') | (df_subset['window_type'] == 'none')]
+order = ['NW', '200da', '100da', '50da', '25da']
 # Variable window
-df_subset = df_subset[(df_subset['window_type'] == 'variable') | (df_subset['window_type'] == 'none')]
-order = ['NW', '4win', '7win', '14win', '28win']
+# df_subset = df_subset[(df_subset['window_type'] == 'variable') | (df_subset['window_type'] == 'none')]
+# order = ['NW', '4win', '7win', '14win', '28win']
 
 # Convert the 'Window' column to a category and specify the order
 df_subset['Window'] = pd.Categorical(df_subset['Window'], categories=order, ordered=True)
@@ -119,19 +121,22 @@ df_subset['Window'].value_counts()
 
 ## Plot SN for each window for each standard separately
 # I normalized against the lowest value across all comparisons, all lipids and windows within a standard
-# Group df_subset by 'Dilution', select the  minimum value in the 'SN_MS1' column, then divide each value in the 'SN_MS1' column by the minimum value,
-# add a new column to df_subset called 'SN_MS1_norm' which contains the normalized SN_MS1 values
-df_subset['SN_MS1_norm'] = df_subset.groupby(['Dilution'])['SN_MS1'].transform(lambda x: x / x.min())
-df_subset['SN_MS2_norm'] = df_subset.groupby(['Dilution'])['SN_MS2'].transform(lambda x: x / x.min())
-# Group df_subset by window and dilution, and get the median value in the 'SN_MS1_norm' column, and the median value in the 'SN_MS2_norm' column
+
+# Plot histograms of SN_MS1 and SN_MS2, Make both plots in one panel
+# How do they look without normalization
+fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+df_subset['SN_MS1'].hist(ax=axes[0])
+df_subset['SN_MS2'].hist(ax=axes[1])
+plt.show()
+
+
 # Create new dataframe called df_subset_SN_median
-df_subset_SN_median = df_subset.groupby(['Window', 'Dilution'])['SN_MS1_norm'].median().reset_index()
-df_subset_SN_median['SN_MS2_norm'] = df_subset.groupby(['Window', 'Dilution'])['SN_MS2_norm'].median().reset_index()['SN_MS2_norm']
+df_subset_SN_median = df_subset.groupby(['Window', 'Dilution'])['SN_MS1'].median().reset_index()
+df_subset_SN_median['SN_MS2'] = df_subset.groupby(['Window', 'Dilution'])['SN_MS2'].median().reset_index()['SN_MS2']
 # Convert df_subset_SN_median from wide format to long format, keep the Dilution column
-
-
-df_subset_SN_median = df_subset_SN_median.melt(id_vars=['Window', 'Dilution'], value_vars=['SN_MS1_norm', 'SN_MS2_norm'], var_name='SN_Type', value_name='SN')
+df_subset_SN_median = df_subset_SN_median.melt(id_vars=['Window', 'Dilution'], value_vars=['SN_MS1', 'SN_MS2'], var_name='SN_Type', value_name='SN')
 # Create lineplot of SN from df_subset_SN_median by 'Window'
+df_subset_SN_median = df_subset.melt(id_vars=['Window', 'Dilution'], value_vars=['SN_MS1', 'SN_MS2'], var_name='SN_Type', value_name='SN')
 
 sns.lineplot(x='Window', y='SN', hue='SN_Type', data=df_subset_SN_median[df_subset_SN_median['Dilution'] == 'std1'], palette=['#B56962', '#64A07E'])
 plt.title('Normalized Median Signal-to-Noise (SN) of Lipid Adducts std1')
@@ -139,13 +144,93 @@ plt.xlabel('Window')
 plt.ylabel('SN')
 plt.show()
 
-sns.lineplot(x='Window', y='SN', hue='SN_Type', data=df_subset_SN_median[df_subset_SN_median['Dilution'] == 'std2'], palette=['#B56962', '#64A07E'])
+# List all unique values in Molcule column of df_subset
+df_subset['Molecule'].unique() 
+df_subset[(df_subset['Molecule'] == '14:0-13:0-14:0 TG-d5') & (df_subset['Dilution'] == 'std1')]
+
+df_subset_long = df_subset.melt(id_vars=['Window', 'Dilution', 'Molecule', 'Replicate'], value_vars=['SN_MS1', 'SN_MS2'], var_name='SN_Type', value_name='SN')
+# Make a line plot with two lines for SN_MS1 and SN_MS2 for df_subset[(df_subset['Molecule'] == '14:0-13:0-14:0 TG-d5') & (df_subset['Dilution'] == 'std1')]
+sns.lineplot(x='Window', y='SN', hue='Molecule', data=df_subset_long[(df_subset_long['SN_Type'] == 'SN_MS2') & (df_subset_long['Dilution'] == 'std1')], estimator='median', ci=None)
+plt.title('Median Signal-to-Noise (SN) of Lipid Adducts std1')
+plt.xlabel('Window')
+plt.ylabel('SN')
+plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+plt.tight_layout()
+plt.show()
+
+
+# Create a single figure with three subplots
+def plot_SN(SN_Type):
+    # Add margins around the subplots
+    fig, axes = plt.subplots(1, 3, figsize=(25, 7.5))
+    # Add margins around the figure
+    
+
+    # Create a lineplot on each subplot
+    sns.lineplot(ax=axes[0], x='Window', y='SN', hue='Molecule', data=df_subset_long[(df_subset_long['SN_Type'] == SN_Type) & (df_subset_long['Dilution'] == 'std1')], estimator='median', ci=None)
+    axes[0].set_title('Median ' + SN_Type + ' of Lipid Adducts std1')
+    axes[0].set_xlabel('Window')
+    axes[0].set_ylabel('SN')
+
+    sns.lineplot(ax=axes[1], x='Window', y='SN', hue='Molecule', data=df_subset_long[(df_subset_long['SN_Type'] == SN_Type) & (df_subset_long['Dilution'] == 'std2')], estimator='median', ci=None)
+    axes[1].set_title('Median ' + SN_Type + ' of Lipid Adducts std2')
+    axes[1].set_xlabel('Window')
+    axes[1].set_ylabel('SN')
+
+    sns.lineplot(ax=axes[2], x='Window', y='SN', hue='Molecule', data=df_subset_long[(df_subset_long['SN_Type'] == SN_Type) & (df_subset_long['Dilution'] == 'std3')], estimator='median', ci=None)
+    axes[2].set_title('Median ' + SN_Type + ' of Lipid Adducts std3')
+    axes[2].set_xlabel('Window')
+    axes[2].set_ylabel('SN')
+
+    # Set the same y-axis limits for all subplots
+    axes[0].set_ylim(0, df_subset_long['SN'].max())
+    # axes[1].set_ylim(0, df_subset_long[df_subset_long['SN_Type'] == SN_Type]['SN'].max())
+    axes[1].set_ylim(0, df_subset_long['SN'].max())
+    axes[2].set_ylim(0, df_subset_long['SN'].max())
+
+    # Remove the legends from the first two subplots
+    axes[0].get_legend().remove()
+    axes[1].get_legend().remove()
+
+    # Adjust the position of the legend on the last subplot
+    axes[2].legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+    plt.tight_layout(rect=[0.1, 0, 0.85, 1]) 
+    plt.show()
+
+plot_SN('SN_MS1')
+plot_SN('SN_MS2')
+
+
+
+
+
+# Group df_subset by 'Dilution', select the  minimum value in the 'SN_MS1' column, then divide each value in the 'SN_MS1' column by the minimum value,
+# add a new column to df_subset called 'SN_MS1_norm' which contains the normalized SN_MS1 values
+df_subset['SN_MS1_norm'] = df_subset.groupby(['Dilution'])['SN_MS1'].transform(lambda x: x / x.min())
+df_subset['SN_MS2_norm'] = df_subset.groupby(['Dilution'])['SN_MS2'].transform(lambda x: x / x.min())
+# Group df_subset by window and dilution, and get the median value in the 'SN_MS1_norm' column, and the median value in the 'SN_MS2_norm' column
+# Create new dataframe called df_subset_SN_median
+df_subset_SN_median_norm = df_subset.groupby(['Window', 'Dilution'])['SN_MS1_norm'].median().reset_index()
+df_subset_SN_median_norm['SN_MS2_norm'] = df_subset.groupby(['Window', 'Dilution'])['SN_MS2_norm'].median().reset_index()['SN_MS2_norm']
+# Convert df_subset_SN_median from wide format to long format, keep the Dilution column
+df_subset_SN_median_norm = df_subset_SN_median_norm.melt(id_vars=['Window', 'Dilution'], value_vars=['SN_MS1_norm', 'SN_MS2_norm'], var_name='SN_Type', value_name='SN')
+# Create lineplot of SN from df_subset_SN_median by 'Window'
+
+sns.lineplot(x='Window', y='SN', hue='SN_Type', data=df_subset_SN_median_norm[df_subset_SN_median_norm['Dilution'] == 'std1'], palette=['#B56962', '#64A07E'])
+plt.title('Normalized Median Signal-to-Noise (SN) of Lipid Adducts std1')
+plt.xlabel('Window')
+plt.ylabel('SN')
+plt.show()
+
+sns.lineplot(x='Window', y='SN', hue='SN_Type', data=df_subset_SN_median_norm[df_subset_SN_median_norm['Dilution'] == 'std2'], palette=['#B56962', '#64A07E'])
 plt.title('Normalized Median Signal-to-Noise (SN) of Lipid Adducts std2')
 plt.xlabel('Window')
 plt.ylabel('SN')
 plt.show()
 
-sns.lineplot(x='Window', y='SN', hue='SN_Type', data=df_subset_SN_median[df_subset_SN_median['Dilution'] == 'std3'], palette=['#B56962', '#64A07E'])
+sns.lineplot(x='Window', y='SN', hue='SN_Type', data=df_subset_SN_median_norm[df_subset_SN_median_norm['Dilution'] == 'std3'], palette=['#B56962', '#64A07E'])
 plt.title('Normalized Median Signal-to-Noise (SN) of Lipid Adducts std3')
 plt.xlabel('Window')
 plt.ylabel('SN')
